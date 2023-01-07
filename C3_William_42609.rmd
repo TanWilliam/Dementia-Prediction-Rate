@@ -1,0 +1,376 @@
+UTS IS 388 Data Analysis
+title: "Algorithm week 8-13"
+author: "William / 00000042609 - Group 3 IS 388-C"
+output: html_document:
+  
+   #import data
+```{r import, message=FALSE, warning=FALSE, paged.print=TRUE}
+library(ggplot2)
+library(dplyr)
+library(Hmisc)
+library(PerformanceAnalytics)
+library(cowplot)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(e1071)
+library(randomForest)
+library(gbm)
+library(Metrics)
+library(vtreat)
+library(AUC)
+library(ROCR)
+library(caTools)
+library(class)
+library(caret)
+
+set.seed(123)
+Data <- read.csv("C3_William_42609.csv")
+print(sample_n(Data, 5))
+str(Data)
+
+```
+#Mising value
+```{r data-manipulation, message=FALSE, warning=FALSE}
+Data <- select(Data, -Hand) 
+#drop Hand column because all objects were right-handed
+Data$SES[is.na(Data$SES)] <- median(Data$SES, na.rm = TRUE)
+Data$MMSE[is.na(Data$MMSE)] <- median(Data$MMSE, na.rm = TRUE)
+```
+
+#Data visualization
+```{r distributions, message=FALSE, warning=FALSE, paged.print=FALSE}
+Data %>%
+  select(ID, Age, CDR, M.F) %>%
+  group_by(ID, CDR, M.F) %>%
+  summarise_all(funs(min)) %>%
+  as.data.frame() %>%
+  mutate(CDR = as.factor(CDR)) %>%
+  ggplot(aes(x = CDR, y = Age, fill = M.F)) + 
+  geom_violin() +
+  labs(title = "1. Distribution of Age by CDR rate",
+       fill = "Sex") +
+  theme_light()
+
+x <- Data %>%
+  select(Educ, CDR, M.F) %>%
+  mutate(CDR = as.factor(CDR)) %>%
+  ggplot(aes(x = CDR, y = Educ)) + 
+  geom_jitter(aes(col = CDR), alpha = 0.6) +
+  labs(title = "x") +
+  theme_light()
+
+y <- Data %>%
+  select(SES, CDR, M.F) %>%
+  mutate(CDR = as.factor(CDR)) %>%
+  ggplot(aes(x = CDR, y = SES)) + 
+  geom_jitter(aes(col = CDR), alpha = 0.6) +
+  labs(title = "x") +
+  theme_light()
+
+p <- plot_grid(x, y) 
+title <- ggdraw() + draw_label("2. Distribution of Education and Social Economic Status", fontface='bold')
+plot_grid(title, p, ncol=1, rel_heights=c(0.1, 1))
+
+x <- Data %>%
+  select(MMSE, CDR, M.F) %>%
+  mutate(CDR = as.factor(CDR)) %>%
+  ggplot(aes(x = CDR, y = MMSE)) + 
+  geom_jitter(aes(col = CDR), alpha = 0.6) +
+  labs(title = "x") +
+  theme_light()
+
+y <- Data %>%
+  select(nWBV, CDR, M.F) %>%
+  mutate(CDR = as.factor(CDR)) %>%
+  ggplot(aes(x = CDR, y = nWBV)) + 
+  geom_jitter(aes(col = CDR), alpha = 0.6) +
+  labs(title = "x") +
+  theme_light()
+
+p <- plot_grid(x, y) 
+title <- ggdraw() + draw_label("3. Distribution of MMSE Score and Wole-brain Volume", fontface='bold')
+plot_grid(title, p, ncol=1, rel_heights=c(0.1, 1))
+
+x <- Data %>%
+  select(eTIV, CDR, M.F) %>%
+  mutate(CDR = as.factor(CDR)) %>%
+  ggplot(aes(x = CDR, y = eTIV)) + 
+  geom_jitter(aes(col = CDR), alpha = 0.6) +
+  labs(title = "x") +
+  theme_light()
+
+y <- Data %>%
+  select(ASF, CDR, M.F) %>%
+  mutate(CDR = as.factor(CDR)) %>%
+  ggplot(aes(x = CDR, y = ASF)) + 
+  geom_jitter(aes(col = CDR), alpha = 0.6) +
+  labs(title = "x") +
+  theme_light()
+
+p <- plot_grid(x, y) 
+title <- ggdraw() + draw_label("4. Distribution of Total Intracranial Volume and Atlas Scaling Factor", fontface='bold')
+plot_grid(title, p, ncol=1, rel_heights=c(0.1, 1))
+```
+
+
+
+DBScan Algorithm
+```{r}
+#a. Load Libraries---------
+library(readxl)
+library(dbscan)
+library(fpc)
+library(factoextra)
+library(ggplot2)
+library(gridExtra)
+library(rstatix)
+library(ggpubr)
+library(caret)
+library(GGally)
+library(tidyverse)
+library(dplyr)
+library(readxl)
+library(knitr) 
+library(ggplot2)
+
+#b. Import Data-----------
+dat <- read.csv("C3_William_42609.csv")
+
+#Exploratory Data Analysis----------
+str(dat)
+summary(dat)
+head(dat)
+tail(dat)
+
+dat$cdr[dat$CDR < 1] <- "0"
+dat$cdr[dat$CDR >= 1] <- "1"
+dat$cdr <- as.numeric(dat$cdr)
+str(dat)
+
+datnum <- select_if(dat, is.numeric)
+str(datnum)
+
+#datnum <- cbind(datnum, dat$cdr)
+datnum <- subset(datnum, select = -c(CDR))
+datnum <-  na.omit(datnum)
+str(datnum)
+
+#ggpairs(datnum)
+
+#Wilcoxon Test
+wilcox.test(datnum$cdr, datnum$Age, paired = TRUE) 
+#p.value = 2.2e-16
+wilcox.test(datnum$cdr, datnum$Educ, paired = TRUE) 
+#p.value = 2.2e-16
+wilcox.test(datnum$cdr, datnum$SES, paired = TRUE) 
+#p.value = 2.2e-16
+wilcox.test(datnum$cdr, datnum$MMSE, paired = TRUE) 
+#p.value = 2.2e-16
+wilcox.test(datnum$cdr, datnum$eTIV, paired = TRUE) 
+#p.value = 2.2e-16
+wilcox.test(datnum$cdr, datnum$eTIV, paired = TRUE) 
+#p.value = 2.2e-16
+wilcox.test(datnum$cdr, datnum$ASF, paired = TRUE) 
+#p.value = 3.822e-08
+
+
+#c. Split Data----
+nim <- 43095
+set.seed(nim)
+samp <- sample(nrow(datnum), 0.8 * nrow(datnum), replace = FALSE)
+
+#Set Training and Testing Data-------------
+train <- datnum[samp,]
+test <- datnum[-samp,]
+
+nrow(train)
+nrow(test)
+
+#d. Find Epsilon and Perform DBSCAN-------
+#Calculate Suitable Epsilon
+dbscan::kNNdistplot(train, k = 2)
+epsilon <- 32
+abline(h = epsilon, lty = 2)
+
+#Perform DBScan------------
+db2 <- dbscan::dbscan(train, eps = epsilon, MinPts = 5)
+db2
+
+#e. Visualize Cluster---------
+factoextra::fviz_cluster(db2, data = train, show.clust.cent = TRUE,
+                         geom = "point", palette = "jco", ggtheme = theme_classic())
+
+#f. Indicate Outliers and Show the Data-----------
+#Age vs CDR
+oL1 <- boxplot(Age ~ cdr, data = train, plot = FALSE)$out
+oL1
+boxplot(Age ~ cdr, data = train)
+
+oL2 <- boxplot(Educ ~ cdr, data = train, plot = FALSE)$out
+oL2
+boxplot(Educ ~ cdr, data = train)
+
+oL3 <- boxplot(SES ~ cdr, data = train, plot = FALSE)$out
+oL3
+boxplot(SES ~ cdr, data = train)
+
+oL4 <- boxplot(MMSE ~ cdr, data = train, plot = FALSE)$out
+oL4
+boxplot(MMSE ~ cdr, data = train)
+
+oL5 <- boxplot(eTIV ~ cdr, data = train, plot = FALSE)$out
+oL5
+boxplot(eTIV ~ cdr, data = train)
+
+oL6 <- boxplot(nWBV ~ cdr, data = train, plot = FALSE)$out
+oL6
+boxplot(nWBV ~ cdr, data = train)
+
+oL7 <- boxplot(ASF ~ cdr, data = train, plot = FALSE)$out
+oL7
+boxplot(ASF ~ cdr, data = train)
+
+#Show Outliers
+factoextra::fviz_cluster(db2, data = train, show.clust.cent = TRUE, 
+                         geom = "point", palette = "jo", ggtheme = theme_classic()) + 
+   labs(subtitle = "The Black Points Symbolizes The Outliers")
+```
+
+```{r}
+#g. Validation---------
+#Pred vs Truth
+#New Dataframe
+newdata <- data.frame(db2$cluster, train$cdr)
+
+newdata <- subset(newdata, db2$cluster != 0)
+str(newdata)
+
+newdata$db2.cluster <- ifelse(newdata$db2.cluster == 1, 0, 1)
+fixValue <- ifelse(newdata$train.cdr == 1, 0, 1)
+
+str(newdata$db2.cluster)
+str(fixValue)
+
+dataDb2 <- as.factor(newdata$db2.cluster)
+fixValue <- as.factor(fixValue) 
+
+str(dataDb2)
+str(fixValue)
+
+confusionMatrix(dataDb2, fixValue)
+```
+
+
+Linear  Regression Algorithm
+```{r}
+#menampilkan struktur data
+str(Data)
+
+#Mencari korelasi antar variable
+cor(Data$Age, Data$CDR)
+
+#melakukan analisa terhadap beberapa model
+linearmodel1 <- lm(CDR~Age, data=Data)
+summary(linearmodel1)
+exp(coef(linearmodel1))
+
+linearmodel2 <- lm(CDR~Age+SES, data=Data)
+summary(linearmodel2)
+exp(coef(linearmodel2))
+
+linearmodel3 <- lm(CDR~Age+SES+Educ, data=Data)
+summary(linearmodel3)
+exp(coef(linearmodel3))
+
+#eksplorasi data
+library(ggplot2)
+library(GGally)
+ggpairs(data = Data, columns = c(7,3,5,6), title = "Dementia Pred Data")
+
+#diagnosa regresi model 1
+
+par(mfrow = c(2,3))
+plot(linearmodel1, which = c(1:6))
+par(mfrow = c(1,1))
+library(lmtest)
+lmtest::dwtest(linearmodel1)
+#p-value yang diperoleh adalah 0.1592 
+#p-value > 0.05 maka  tidak terdapat otokorelasi
+
+library(nortest)
+ad.test(linearmodel1$residuals)
+#p-value < 0.05 
+#data tidak berdistribusi normal
+
+
+#diagnosa regresi model 2
+
+par(mfrow = c(2,3))
+plot(linearmodel2, which = c(1:6))
+par(mfrow = c(1,1))
+library(lmtest)
+lmtest::dwtest(linearmodel2)
+#p-value yang diperoleh adalah 0.1638 
+#p-value > 0.05 maka  tidak terdapat otokorelasi
+
+library(nortest)
+ad.test(linearmodel2$residuals)
+#p-value < 0.05 
+#data tidak berdistribusi normal
+
+library(car)
+car::vif(linearmodel2)
+#nilai vif test masing - masing variabel berada di antara 1 hingga 5
+#data terdapat multikolinearitas (masih dapat diterima)
+
+#diagnosa regresi 3
+par(mfrow = c(2,3))
+plot(linearmodel2, which = c(1:6))
+par(mfrow = c(1,1))
+library(lmtest)
+lmtest::dwtest(linearmodel3)
+#p-value yang diperoleh adalah  0.1697
+#p-value > 0.05 maka  tidak terdapat otokorelasi
+
+
+library(nortest)
+ad.test(linearmodel3$residuals)
+#p-value < 0.05 
+#data tidak berdistribusi normal 
+
+library(car)
+car::vif(linearmodel3)
+#nilai vif test masing - masing variabel berada di antara 1 hingga 5
+#data terdapat multikolinearitas (masih dapat diterima)
+
+#Split Data
+Data_new <- Data %>%
+  select(M.F, Age, Educ, SES, MMSE, eTIV, nWBV, ASF, CDR) %>%
+  mutate(CDR = as.factor(CDR))
+
+n_train <- round(0.8 * nrow(Data_new))
+train_indices <- sample(1:nrow(Data_new), n_train) 
+train <- Data_new[train_indices, ]
+test <- Data_new[-train_indices, ] 
+
+#membuat prediksi
+prediksi <- predict(linearmodel1, test)
+library(Metrics)
+rmse(test$SES, prediksi)
+
+prediksi2 <- predict(linearmodel2, test)
+library(Metrics)
+rmse(test$SES, prediksi2)
+
+prediksi3 <- predict(linearmodel3, test)
+library(Metrics)
+rmse(test$SES, prediksi3)
+
+#Model yang menghasilkan kualitas prediktif terbaik adalah model 3 karena RMSE Nya paling kecil diantara ketiga model tsb 
+```
+
+
+```
+
+
